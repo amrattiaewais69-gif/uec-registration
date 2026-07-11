@@ -125,7 +125,8 @@
             if (localState.studentInfo.photoUrl) {
                 document.getElementById('studentPhoto').src = "photos/" + localState.studentInfo.photoUrl;
             } else if (localState.studentInfo.id) {
-                document.getElementById('studentPhoto').src = "photos/" + localState.studentInfo.id + ".jpg";
+                var cleanId = localState.studentInfo.id.replace(/-/g, '');
+                document.getElementById('studentPhoto').src = "photos/" + cleanId + ".jpg";
             }
             document.getElementById('lblName').innerText = localState.studentInfo.name;
             document.getElementById('lblFaculty').innerText = localState.studentInfo.faculty || "---";
