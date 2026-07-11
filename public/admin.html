@@ -143,21 +143,20 @@
             <div class="card">
                 <h3>Bulk Upload: Failed Courses</h3>
                 <div style="display:flex; flex-direction:column; gap:10px;">
-                    <small>Paste one record per line: <code>StudentID,CourseCode</code></small>
-                    <small>Example: <code>25-100001,BMS172</code></small>
-                    <textarea id="bulkFailedCourses" rows="8" placeholder="25-100001,BMS172&#10;25-100001,BMS171&#10;25-100002,BMS151" style="padding:8px; font-family:monospace; font-size:13px;"></textarea>
+                    <small>CSV format: <code>StudentID,CourseCode</code></small>
+                    <textarea id="bulkFailedCourses" rows="6" placeholder="25-100001,BMS172&#10;25-100001,BMS171&#10;25-100002,BMS151" style="padding:8px; font-family:monospace; font-size:13px;"></textarea>
                     <button class="btn btn-warning" onclick="executeBulkFailedCourses()">Upload Failed Courses</button>
                     <small id="bulkFailedResult" style="font-weight:600;"></small>
                 </div>
             </div>
             <div class="card">
-                <h3>Bulk Upload: Student-Supervisor Assignment</h3>
+                <h3>Bulk Upload: Students + Supervisors (CSV)</h3>
                 <div style="display:flex; flex-direction:column; gap:10px;">
-                    <small>Paste one record per line: <code>StudentID,SupervisorID</code></small>
-                    <small>Example: <code>25-100001,nmahmoud</code></small>
-                    <textarea id="bulkSupervisorAssign" rows="8" placeholder="25-100001,nmahmoud&#10;25-100002,nmahmoud&#10;25-100003,11" style="padding:8px; font-family:monospace; font-size:13px;"></textarea>
-                    <button class="btn btn-warning" onclick="executeBulkAssignSupervisors()">Upload Assignments</button>
-                    <small id="bulkSupervisorResult" style="font-weight:600;"></small>
+                    <small>CSV columns: <code>StudentID,Password,Name,Email,AcademicLevel,SupervisorID,Faculty</code></small>
+                    <small>If student exists → updates supervisor. If not → creates student.</small>
+                    <input type="file" id="bulkCsvFile" accept=".csv" style="padding:8px;">
+                    <button class="btn btn-warning" onclick="executeBulkCsvUpload()">Upload CSV</button>
+                    <small id="bulkCsvResult" style="font-weight:600;"></small>
                 </div>
             </div>
         </div>
@@ -422,17 +421,52 @@
         }
 
         async function executeBulkAssignSupervisors() {
-            const text = document.getElementById('bulkSupervisorAssign').value;
-            const resultEl = document.getElementById('bulkSupervisorResult');
-            const rows = parseBulkText(text);
-            if (rows.length === 0) { alert('Paste data first.'); return; }
-            const data = rows.map(r => ({ studentId: r.first, supervisorId: r.second }));
+            alert('Use the CSV upload below instead.');
+        }
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            const headers = lines[0].split(',').map(h => h.trim());
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const vals = [];
+                let cur = '', inQ = false;
+                for (let j = 0; j < lines[i].length; j++) {
+                    if (lines[i][j] === '"') { inQ = !inQ; continue; }
+                    if (lines[i][j] === ',' && !inQ) { vals.push(cur.trim()); cur = ''; continue; }
+                    cur += lines[i][j];
+                }
+                vals.push(cur.trim());
+                const row = {};
+                headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        async function executeBulkCsvUpload() {
+            const fileInput = document.getElementById('bulkCsvFile');
+            const resultEl = document.getElementById('bulkCsvResult');
+            if (!fileInput.files.length) { alert('Select a CSV file first.'); return; }
+            const text = await fileInput.files[0].text();
+            const rows = parseCSV(text);
+            if (rows.length === 0) { alert('CSV is empty.'); return; }
+            const data = rows.map(r => ({
+                studentId: r.StudentID || '',
+                password: r.Password || '',
+                name: r.Name || '',
+                email: r.Email || '',
+                academicLevel: r.AcademicLevel || '',
+                supervisorId: r.SupervisorID || '',
+                faculty: r.Faculty || ''
+            }));
             try {
                 const result = await apiCall('/admin/bulkAssignSupervisors', 'POST', { data });
                 resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
                 resultEl.innerText = result.message;
-                if (result.success) document.getElementById('bulkSupervisorAssign').value = '';
-            } catch(e) { alert('Error uploading assignments.'); }
+                if (result.success) { fileInput.value = ''; loadStudentsForPhoto(); }
+            } catch(e) { alert('Error uploading CSV.'); }
         }
 
         window.onload = function() { pullMetrics(); loadStudentsForPhoto(); loadSupervisorsForDropdown(); };

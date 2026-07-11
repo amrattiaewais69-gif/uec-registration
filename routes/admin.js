@@ -281,21 +281,32 @@ router.post('/bulkAssignSupervisors', authMiddleware(['admin']), async (req, res
     if (!data || !Array.isArray(data) || data.length === 0) {
       return res.json({ success: false, message: 'No data provided.' });
     }
-    let updated = 0, skipped = 0;
+    let created = 0, updated = 0, skipped = 0;
     for (const row of data) {
       const studentId = (row.studentId || '').trim();
       const supervisorId = (row.supervisorId || '').trim();
+      const name = (row.name || '').trim();
+      const email = (row.email || '').trim();
+      const password = (row.password || '').trim();
+      const faculty = (row.faculty || '').trim();
+      const academicLevel = (row.academicLevel || '').trim();
       if (!studentId || !supervisorId) { skipped++; continue; }
       try {
-        const result = await db.query(
-          'UPDATE students SET supervisor_id = $1 WHERE student_id = $2',
-          [supervisorId, studentId]
-        );
-        if (result.rowCount > 0) updated++;
-        else skipped++;
+        const { rows: existing } = await db.query('SELECT student_id FROM students WHERE student_id = $1', [studentId]);
+        if (existing.length > 0) {
+          await db.query('UPDATE students SET supervisor_id = $1 WHERE student_id = $2', [supervisorId, studentId]);
+          updated++;
+        } else {
+          const hash = await bcrypt.hash(password || studentId, 12);
+          await db.query(
+            'INSERT INTO students (student_id, name, email, password_hash, faculty, academic_level, supervisor_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            [studentId, name || studentId, email || null, hash, faculty || 'General', academicLevel || null, supervisorId]
+          );
+          created++;
+        }
       } catch (e) { skipped++; }
     }
-    return res.json({ success: true, message: `Done. Updated: ${updated}, Skipped: ${skipped}` });
+    return res.json({ success: true, message: `Done. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}` });
   } catch (error) {
     console.error('Bulk assign supervisors error:', error);
     return res.json({ success: false, message: 'Server error.' });
