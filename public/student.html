@@ -122,8 +122,10 @@
 
         function renderUI() {
             document.getElementById('lblId').innerText = localState.studentInfo.id;
-            if (localState.studentInfo.id) {
-                document.getElementById('studentPhoto').src = "photo/" + localState.studentInfo.id + ".jpg";
+            if (localState.studentInfo.photoUrl) {
+                document.getElementById('studentPhoto').src = "photos/" + localState.studentInfo.photoUrl;
+            } else if (localState.studentInfo.id) {
+                document.getElementById('studentPhoto').src = "photos/" + localState.studentInfo.id + ".jpg";
             }
             document.getElementById('lblName').innerText = localState.studentInfo.name;
             document.getElementById('lblFaculty').innerText = localState.studentInfo.faculty || "---";

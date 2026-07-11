@@ -58,6 +58,42 @@
             </thead>
             <tbody></tbody>
         </table>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:30px;">
+            <div class="card">
+                <h3>Password Reset</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <select id="resetRole" style="padding:8px;" onchange="loadUsersForReset()">
+                        <option value="">Select Role...</option>
+                        <option value="student">Student</option>
+                        <option value="supervisor">Supervisor</option>
+                    </select>
+                    <select id="resetUserId" style="padding:8px;">
+                        <option value="">Select User...</option>
+                    </select>
+                    <input type="text" id="resetNewPwd" placeholder="New Password" style="padding:8px;">
+                    <button class="btn btn-warning" onclick="executePasswordReset()">Reset Password</button>
+                    <small id="resetResult" style="color:#16a34a; font-weight:600;"></small>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Student Photo Management</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <select id="photoStudentId" style="padding:8px;" onchange="previewCurrentPhoto()">
+                        <option value="">Select Student...</option>
+                    </select>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img id="photoPreview" src="" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid #e2e8f0; display:none;" onerror="this.style.display='none'">
+                        <div style="flex:1;">
+                            <input type="text" id="photoUrlInput" placeholder="Photo filename (e.g. 1.jpg)" style="padding:8px; width:100%;">
+                            <small>Photos available: 1.jpg - 40.jpg in /photos/</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="executeSetPhoto()">Set Photo</button>
+                    <small id="photoResult" style="color:#16a34a; font-weight:600;"></small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -129,7 +165,83 @@
         }
 
         function logout() { localStorage.clear(); window.location.href = 'index.html'; }
-        window.onload = pullMetrics;
+
+        async function loadUsersForReset() {
+            const role = document.getElementById('resetRole').value;
+            const select = document.getElementById('resetUserId');
+            select.innerHTML = '<option value="">Loading...</option>';
+            if (!role) { select.innerHTML = '<option value="">Select User...</option>'; return; }
+            try {
+                const endpoint = role === 'student' ? '/admin/students' : '/admin/supervisors';
+                const data = await apiCall(endpoint);
+                select.innerHTML = '<option value="">Select User...</option>';
+                const list = role === 'student' ? data.students : data.supervisors;
+                if (list) list.forEach(u => {
+                    const id = role === 'student' ? u.student_id : u.supervisor_id;
+                    select.innerHTML += `<option value="${id}">${id} - ${u.name}</option>`;
+                });
+            } catch(e) { select.innerHTML = '<option value="">Error loading</option>'; }
+        }
+
+        async function executePasswordReset() {
+            const role = document.getElementById('resetRole').value;
+            const userId = document.getElementById('resetUserId').value;
+            const newPwd = document.getElementById('resetNewPwd').value.trim();
+            const resultEl = document.getElementById('resetResult');
+            if (!role || !userId || !newPwd) { alert('Select role, user, and enter new password.'); return; }
+            if (newPwd.length < 6) { alert('Password must be at least 6 characters.'); return; }
+            try {
+                const result = await apiCall('/admin/resetPassword', 'POST', { userId, role, newPassword: newPwd });
+                resultEl.innerText = result.message;
+                if (result.success) document.getElementById('resetNewPwd').value = '';
+            } catch(e) { alert('Error resetting password.'); }
+        }
+
+        async function loadStudentsForPhoto() {
+            try {
+                const data = await apiCall('/admin/students');
+                const select = document.getElementById('photoStudentId');
+                select.innerHTML = '<option value="">Select Student...</option>';
+                if (data.students) data.students.forEach(s => {
+                    const photoHint = s.photo_url ? ` [${s.photo_url}]` : '';
+                    select.innerHTML += `<option value="${s.student_id}" data-photo="${s.photo_url || ''}">${s.student_id} - ${s.name}${photoHint}</option>`;
+                });
+            } catch(e) {}
+        }
+
+        function previewCurrentPhoto() {
+            const select = document.getElementById('photoStudentId');
+            const opt = select.options[select.selectedIndex];
+            const currentPhoto = opt ? opt.getAttribute('data-photo') : '';
+            const preview = document.getElementById('photoPreview');
+            const input = document.getElementById('photoUrlInput');
+            if (currentPhoto) {
+                preview.src = 'photos/' + currentPhoto;
+                preview.style.display = 'block';
+                input.value = currentPhoto;
+            } else {
+                preview.style.display = 'none';
+                input.value = '';
+            }
+        }
+
+        async function executeSetPhoto() {
+            const studentId = document.getElementById('photoStudentId').value;
+            const photoUrl = document.getElementById('photoUrlInput').value.trim();
+            const resultEl = document.getElementById('photoResult');
+            if (!studentId) { alert('Select a student.'); return; }
+            try {
+                const result = await apiCall('/admin/setPhoto', 'POST', { studentId, photoUrl });
+                resultEl.innerText = result.message;
+                if (result.success) {
+                    const opt = document.querySelector(`#photoStudentId option[value="${studentId}"]`);
+                    if (opt) opt.setAttribute('data-photo', photoUrl);
+                    previewCurrentPhoto();
+                }
+            } catch(e) { alert('Error setting photo.'); }
+        }
+
+        window.onload = function() { pullMetrics(); loadStudentsForPhoto(); };
     </script>
 </body>
 </html>

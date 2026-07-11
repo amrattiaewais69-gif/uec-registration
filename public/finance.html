@@ -215,19 +215,28 @@
         
         function exportToExcel() {
             if (!globalRequestsData || globalRequestsData.length === 0) { alert("No data available."); return; }
-            let csv = "\ufeffStudent ID,Student Name,Courses,Cash Paid,Discount,Method,Date,Receipt\n";
+            let csv = "\ufeffStudent ID,Student Name,Courses,Cash Paid,Discount,Discount Approver,Method,Date,Receipt\n";
             let count = 0;
             globalRequestsData.forEach(r => {
                 if (r.paymentsHistory && r.paymentsHistory.length > 0) {
-                    let paid = 0, disc = 0, methods = [], dates = [], receipts = [];
+                    let paid = 0, disc = 0, methods = [], dates = [], receipts = [], discApprovers = [];
                     r.paymentsHistory.forEach(p => {
                         const a = parseFloat(p.amount) || 0;
-                        if (p.method === 'Discount' || p.status === 'Settlement/Discount') { disc += a; }
-                        else { paid += a; methods.push(p.method); dates.push(p.date ? new Date(p.date).toLocaleDateString('en-GB') : ''); receipts.push(p.receiptNo); }
+                        if (p.method === 'Discount' || p.status === 'Settlement/Discount') {
+                            disc += a;
+                            const ref = p.refNum || '';
+                            const match = ref.match(/Discount\s+\d+%?\s*-\s*(.+)/i);
+                            if (match) discApprovers.push(match[1].trim());
+                        } else {
+                            paid += a;
+                            methods.push(p.method);
+                            dates.push(p.date ? new Date(p.date).toLocaleDateString('en-GB') : '');
+                            receipts.push(p.receiptNo);
+                        }
                     });
                     if (paid > 0 || disc > 0) {
                         count++;
-                        csv += `"${r.studentId}","${r.studentName}","${r.courses}",${paid},${disc},"${methods.join('+')}","${dates.join(', ')}","${receipts.join(', ')}"\n`;
+                        csv += `"${r.studentId}","${r.studentName}","${r.courses}",${paid},${disc},"${discApprovers.join('; ')}","${methods.join('+')}","${dates.join(', ')}","${receipts.join(', ')}"\n`;
                     }
                 }
             });

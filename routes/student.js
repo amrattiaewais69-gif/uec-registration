@@ -61,7 +61,8 @@ router.get('/dashboard', authMiddleware(['student']), async (req, res) => {
       success: true,
       studentInfo: {
         id: student.student_id, name: student.name, level: student.academic_level,
-        supervisorName: supervisor ? supervisor.name : 'N/A', faculty: student.faculty || '---'
+        supervisorName: supervisor ? supervisor.name : 'N/A', faculty: student.faculty || '---',
+        photoUrl: student.photo_url || ''
       },
       courses: availableCourses,
       currentRequest: studentRequest
