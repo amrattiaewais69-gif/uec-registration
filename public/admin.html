@@ -86,7 +86,7 @@
                         <img id="photoPreview" src="" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid #e2e8f0; display:none;" onerror="this.style.display='none'">
                         <div style="flex:1;">
                             <input type="text" id="photoUrlInput" placeholder="Photo filename (e.g. 1.jpg)" style="padding:8px; width:100%;">
-                            <small>Photos available: 1.jpg - 40.jpg in /photos/</small>
+                            <small>Photos named by student ID (e.g. 25100001.jpg). Leave empty to use auto-match.</small>
                         </div>
                     </div>
                     <button class="btn btn-primary" onclick="executeSetPhoto()">Set Photo</button>
@@ -213,12 +213,18 @@
             const select = document.getElementById('photoStudentId');
             const opt = select.options[select.selectedIndex];
             const currentPhoto = opt ? opt.getAttribute('data-photo') : '';
+            const studentId = opt ? opt.value : '';
             const preview = document.getElementById('photoPreview');
             const input = document.getElementById('photoUrlInput');
             if (currentPhoto) {
                 preview.src = 'photos/' + currentPhoto;
                 preview.style.display = 'block';
                 input.value = currentPhoto;
+            } else if (studentId) {
+                var cleanId = studentId.replace(/-/g, '');
+                preview.src = 'photos/' + cleanId + '.jpg';
+                preview.style.display = 'block';
+                input.value = '';
             } else {
                 preview.style.display = 'none';
                 input.value = '';
@@ -236,6 +242,10 @@
                 if (result.success) {
                     const opt = document.querySelector(`#photoStudentId option[value="${studentId}"]`);
                     if (opt) opt.setAttribute('data-photo', photoUrl);
+                    if (opt) {
+                        var hint = photoUrl ? ` [${photoUrl}]` : '';
+                        opt.textContent = studentId + ' - ' + opt.textContent.split(' - ').slice(1).join(' - ').replace(/ \[.*?\]/, '') + hint;
+                    }
                     previewCurrentPhoto();
                 }
             } catch(e) { alert('Error setting photo.'); }
