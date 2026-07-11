@@ -20,7 +20,14 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 app.use(compression());
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://registration.uec.edu.eg',
+    'https://summer-course-registration.vercel.app'
+  ],
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
