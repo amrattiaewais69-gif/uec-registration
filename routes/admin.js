@@ -331,4 +331,52 @@ router.post('/updateCourseSeats', authMiddleware(['admin']), async (req, res) =>
   }
 });
 
+router.post('/bulkUpdateCourses', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.json({ success: false, message: 'No data provided.' });
+    }
+    let updated = 0, created = 0, skipped = 0;
+    for (const row of data) {
+      const code = (row.courseCode || '').trim();
+      const name = (row.courseName || '').trim();
+      const creditHours = parseInt(row.creditHours);
+      const maxSeats = parseInt(row.maxSeats);
+      const feePerCredit = parseFloat(row.feePerCredit);
+      const faculty = (row.faculty || '').trim();
+      if (!code) { skipped++; continue; }
+      try {
+        const { rows: existing } = await db.query('SELECT course_code FROM courses WHERE course_code = $1', [code]);
+        if (existing.length > 0) {
+          const sets = [];
+          const vals = [];
+          let pi = 1;
+          if (name) { sets.push(`course_name = $${pi++}`); vals.push(name); }
+          if (!isNaN(creditHours)) { sets.push(`credit_hours = $${pi++}`); vals.push(creditHours); }
+          if (!isNaN(maxSeats)) { sets.push(`max_seats = $${pi++}`); vals.push(maxSeats); }
+          if (!isNaN(feePerCredit)) { sets.push(`fee_per_credit = $${pi++}`); vals.push(feePerCredit); }
+          if (faculty) { sets.push(`faculty = $${pi++}`); vals.push(faculty); }
+          if (sets.length > 0) {
+            vals.push(code);
+            await db.query(`UPDATE courses SET ${sets.join(', ')} WHERE course_code = $${pi}`, vals);
+          }
+          updated++;
+        } else {
+          if (!name || isNaN(creditHours)) { skipped++; continue; }
+          await db.query(
+            'INSERT INTO courses (course_code, course_name, credit_hours, max_seats, fee_per_credit, faculty) VALUES ($1,$2,$3,$4,$5,$6)',
+            [code, name, creditHours, isNaN(maxSeats) ? 100 : maxSeats, isNaN(feePerCredit) ? 0 : feePerCredit, faculty || 'General']
+          );
+          created++;
+        }
+      } catch (e) { skipped++; }
+    }
+    return res.json({ success: true, message: `Done. Updated: ${updated}, Created: ${created}, Skipped: ${skipped}` });
+  } catch (error) {
+    console.error('Bulk update courses error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
 module.exports = router;

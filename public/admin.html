@@ -167,6 +167,19 @@
                 </div>
             </div>
         </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:20px;">
+            <div class="card">
+                <h3>Bulk Upload: Courses (CSV)</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <small>CSV columns: <code>CourseCode,CourseName,CreditHours,MaxSeats,FeePerCredit,Faculty</code></small>
+                    <small>If course exists → updates CreditHours, MaxSeats, FeePerCredit. If not → creates course.</small>
+                    <input type="file" id="bulkCoursesCsvFile" accept=".csv" style="padding:8px;">
+                    <button class="btn btn-warning" onclick="executeBulkCoursesCsv()">Upload Courses CSV</button>
+                    <small id="bulkCoursesResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -463,6 +476,29 @@
                 resultEl.innerText = result.message;
                 if (result.success) { fileInput.value = ''; loadStudentsForPhoto(); }
             } catch(e) { alert('Error uploading CSV.'); }
+        }
+
+        async function executeBulkCoursesCsv() {
+            const fileInput = document.getElementById('bulkCoursesCsvFile');
+            const resultEl = document.getElementById('bulkCoursesResult');
+            if (!fileInput.files.length) { alert('Select a CSV file first.'); return; }
+            const text = await fileInput.files[0].text();
+            const rows = parseCSV(text);
+            if (rows.length === 0) { alert('CSV is empty.'); return; }
+            const data = rows.map(r => ({
+                courseCode: r.CourseCode || '',
+                courseName: r.CourseName || '',
+                creditHours: r.CreditHours || '',
+                maxSeats: r.MaxSeats || '',
+                feePerCredit: r.FeePerCredit || '',
+                faculty: r.Faculty || ''
+            }));
+            try {
+                const result = await apiCall('/admin/bulkUpdateCourses', 'POST', { data });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) { fileInput.value = ''; pullMetrics(); }
+            } catch(e) { alert('Error uploading courses CSV.'); }
         }
 
         function renderCourseTable(courses) {
