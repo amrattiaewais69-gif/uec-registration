@@ -49,6 +49,21 @@
             <summary style="padding:14px 18px; cursor:pointer; font-weight:700; font-size:16px; user-select:none;">Course Allocation & Satiation Analytics</summary>
             <div style="padding:14px 18px;">
                 <input type="text" id="courseSearch" placeholder="Search by code or name..." style="padding:8px 12px; width:100%; margin-bottom:12px; box-sizing:border-box;" oninput="filterCourses()">
+                <div id="courseEditForm" style="display:none; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:14px; margin-bottom:14px;">
+                    <h4 style="margin:0 0 10px 0;">Edit Course: <span id="editCourseCode"></span></h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div><small>Course Name</small><input type="text" id="editCourseName" style="padding:6px; width:100%;"></div>
+                        <div><small>Credit Hours</small><input type="number" id="editCreditHours" style="padding:6px; width:100%;"></div>
+                        <div><small>Max Seats</small><input type="number" id="editMaxSeats" style="padding:6px; width:100%;"></div>
+                        <div><small>Fee Per Credit</small><input type="number" id="editFeePerCredit" style="padding:6px; width:100%;"></div>
+                        <div><small>Faculty</small><input type="text" id="editFaculty" style="padding:6px; width:100%;"></div>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:8px;">
+                        <button class="btn btn-success" onclick="saveCourseEdit()">Save</button>
+                        <button class="btn btn-danger" style="padding:6px 14px;" onclick="cancelCourseEdit()">Cancel</button>
+                        <small id="editCourseResult" style="font-weight:600;"></small>
+                    </div>
+                </div>
                 <table id="analyticsTable">
                     <thead>
                         <tr>
@@ -57,7 +72,7 @@
                             <th>Booked</th>
                             <th>Max</th>
                             <th>Fill Rate</th>
-                            <th>Adjust Seats</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -521,11 +536,51 @@
                         <div style="display:flex; align-items:center; gap:4px;">
                             <button class="btn btn-warning" style="padding:2px 8px; font-size:14px;" onclick="updateSeats('${c.code}', -1)">-</button>
                             <button class="btn btn-warning" style="padding:2px 8px; font-size:14px;" onclick="updateSeats('${c.code}', 1)">+</button>
+                            <button class="btn btn-primary" style="padding:2px 8px; font-size:12px;" onclick="openCourseEdit('${c.code}')">Edit</button>
                         </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
+        }
+
+        function openCourseEdit(code) {
+            const c = (window._courseStats || []).find(x => x.code === code);
+            if (!c) return;
+            document.getElementById('editCourseCode').innerText = code;
+            document.getElementById('editCourseName').value = c.name;
+            document.getElementById('editCreditHours').value = c.creditHours || '';
+            document.getElementById('editMaxSeats').value = c.max;
+            document.getElementById('editFeePerCredit').value = c.feePerCredit || '';
+            document.getElementById('editFaculty').value = c.faculty || '';
+            document.getElementById('editCourseResult').innerText = '';
+            document.getElementById('courseEditForm').style.display = 'block';
+            window._editingCourseCode = code;
+        }
+
+        function cancelCourseEdit() {
+            document.getElementById('courseEditForm').style.display = 'none';
+            window._editingCourseCode = null;
+        }
+
+        async function saveCourseEdit() {
+            const code = window._editingCourseCode;
+            const resultEl = document.getElementById('editCourseResult');
+            if (!code) return;
+            const payload = {
+                courseCode: code,
+                courseName: document.getElementById('editCourseName').value.trim(),
+                creditHours: document.getElementById('editCreditHours').value,
+                maxSeats: document.getElementById('editMaxSeats').value,
+                feePerCredit: document.getElementById('editFeePerCredit').value,
+                faculty: document.getElementById('editFaculty').value.trim()
+            };
+            try {
+                const result = await apiCall('/admin/bulkUpdateCourses', 'POST', { data: [payload] });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) { pullMetrics(); cancelCourseEdit(); }
+            } catch(e) { alert('Error saving course.'); }
         }
 
         function filterCourses() {

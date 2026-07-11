@@ -40,7 +40,7 @@ router.get('/dashboard', authMiddleware(['admin']), async (req, res) => {
     const courseStats = courses.map(c => {
       const allocated = occupancyMap[c.course_code] || 0;
       const max = Number(c.max_seats) || 1;
-      return { code: c.course_code, name: c.course_name, allocated, max, percentage: ((allocated / max) * 100).toFixed(1) + '%' };
+      return { code: c.course_code, name: c.course_name, allocated, max, percentage: ((allocated / max) * 100).toFixed(1) + '%', creditHours: Number(c.credit_hours), feePerCredit: Number(c.fee_per_credit), faculty: c.faculty };
     });
 
     return res.json({
