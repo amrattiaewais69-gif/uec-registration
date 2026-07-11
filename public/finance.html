@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Finance Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .history-box { background: #f1f5f9; border-radius: 4px; padding: 6px 10px; margin-top: 5px; font-size: 12px; border-left: 3px solid #0284c7; }
+        .reprint-btn { background: #0284c7; color: white; border: none; padding: 3px 8px; font-size: 11px; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+        .reprint-btn:hover { background: #0369a1; }
+        #printFrame { display: none; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-brand">
+            <h2>Student Financial Services</h2>
+        </div>
+        <div>
+            <span id="financeUserLabel" style="margin-right:20px; font-weight:600;"></span>
+            <button class="btn btn-danger" style="padding: 6px 14px;" onclick="logout()">Disconnect</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+            <label style="font-weight:600; font-size:14px; color:#1e293b;">Receipt Reason Text:</label>
+            <input type="text" id="receiptReasonText" value="Summer Registration 2025-2026" style="width:100%; max-width:500px; display:block; margin-top:5px; padding:8px; border:1px solid #cbd5e1; border-radius:4px;">
+        </div>
+
+        <div style="margin-bottom: 20px; text-align: left;">
+            <button class="btn btn-success" style="background-color: #16a34a; padding: 8px 16px; font-weight: 600; font-size: 13px;" onclick="exportToExcel()"> Export Paid Students List </button>
+        </div>
+        
+        <h3>Tuition Clearing Pipeline</h3>
+
+        <div style="background: #ffffff; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: var(--card-shadow); display: flex; align-items: center; gap: 15px;">
+            <div style="flex-grow: 1; max-width: 400px;">
+                <input type="text" id="searchStudentInput" onkeyup="filterStudentTable()" placeholder="Search by Student ID or Name..." style="margin: 0; padding: 10px 15px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; font-size: 14px;">
+            </div>
+        </div>
+        
+        <table id="ledgerTable">
+            <thead>
+                <tr>
+                    <th>Student Profile</th>
+                    <th>Financial Status</th>
+                    <th>Payment Method & Date</th>
+                    <th>Amount & Ref</th>
+                    <th>Controls</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <iframe id="printFrame"></iframe>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const authToken = localStorage.getItem('sessionToken');
+        const userRole = localStorage.getItem('userRole');
+        let globalRequestsData = [];
+
+        if (!authToken || userRole !== 'finance') { window.location.href = 'index.html'; }
+        document.getElementById('financeUserLabel').innerText = "Finance Officer: " + localStorage.getItem('displayName');
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const opts = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(`${API_BASE}${endpoint}`, opts);
+            return res.json();
+        }
+
+        function tafqeet(num) {
+            if(num === 0) return "Zero";
+            const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+            const tens = ["", "Ten", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+            
+            function convertUnderThousand(n) {
+                let text = "";
+                let h = Math.floor(n / 100);
+                let rem = n % 100;
+                let t = Math.floor(rem / 10);
+                let o = rem % 10;
+                if (h > 0) text += ones[h] + " Hundred";
+                if (rem > 0) {
+                    if (text !== "") text += " and ";
+                    if (rem < 10) text += ones[o];
+                    else if (rem < 20) text += ones[o] + "teen";
+                    else { if (o > 0) text += ones[o] + "-"; text += tens[t]; }
+                }
+                return text;
+            }
+
+            let str = "";
+            let thousands = Math.floor(num / 1000);
+            let remThousand = num % 1000;
+            if (thousands > 0) { str += convertUnderThousand(thousands) + " Thousand"; }
+            if (remThousand > 0) { if (str !== "") str += " "; str += convertUnderThousand(remThousand); }
+            return str + " Egyptian Pounds Only";
+        }
+
+        async function pullLedger() {
+            try {
+                const data = await apiCall('/finance/dashboard');
+                if (!data.success) { alert(data.message); return; }
+
+                globalRequestsData = data.requests;
+                const tbody = document.querySelector('#ledgerTable tbody');
+                tbody.innerHTML = '';
+
+                data.requests.forEach(r => {
+                    const tr = document.createElement('tr');
+                    const reconciled = r.remainingAmount <= 0;
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    
+                    let historyHTML = "";
+                    let actualPaid = 0;
+                    let discountTotal = 0;
+
+                    if(r.paymentsHistory && r.paymentsHistory.length > 0) {
+                        historyHTML = `<div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">`;
+                        let installCount = 1;
+                        
+                        r.paymentsHistory.forEach((p) => {
+                            const amt = parseFloat(p.amount) || 0;
+                            const dt = p.date ? new Date(p.date).toLocaleDateString('en-GB') : 'N/A';
+                            const rNo = p.receiptNo || '';
+                            const meth = p.method || 'N/A';
+                            const st = p.status || '';
+                            const ref = p.refNum || '';
+
+                            if (meth === 'Discount' || st === 'Settlement/Discount') {
+                                discountTotal += amt;
+                                historyHTML += `<div style="background: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #e11d48; padding: 6px 12px; border-radius: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div><span style="background: #ffe4e6; color: #be123c; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;">DISCOUNT</span> <strong style="color: #e11d48;">- ${amt} EGP</strong> on ${dt} <em>(${ref})</em></div>
+                                </div>`;
+                            } else {
+                                actualPaid += amt;
+                                historyHTML += `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #0284c7; padding: 6px 12px; border-radius: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div><span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;">INSTALLMENT ${installCount}</span> <strong>${amt} EGP</strong> on ${dt} via <strong>${meth}</strong></div>
+                                    <button class="reprint-btn" onclick="executeDirectPrint('${rNo}', '${r.studentName}', '${r.studentId}', '${r.faculty}', ${amt}, '${dt}', '${meth}')">Re-Print</button>
+                                </div>`;
+                                installCount++;
+                            }
+                        });
+                        historyHTML += `</div>`;
+                    }
+
+                    tr.innerHTML = `
+                        <td><strong>${r.studentName}</strong><br><small style="color:#64748b;">ID: ${r.studentId} | Faculty: ${r.faculty}</small></td>
+                        <td>
+                            <div style="font-weight:700;">Total: ${r.totalFees} EGP</div>
+                            <div style="font-size:12px; color:var(--success-color);">Paid: ${actualPaid} EGP</div>
+                            ${discountTotal > 0 ? `<div style="font-size:12px; color:#e11d48;">Discount: -${discountTotal} EGP</div>` : ''}
+                            <div style="font-size:12px; color:var(--danger-color); font-weight:700;">Due: ${r.remainingAmount} EGP</div>
+                            <span class="badge" style="background:#e0f2fe; color:#0369a1; margin-top:5px; display:inline-block;">${r.status}</span>
+                            ${historyHTML}
+                        </td>
+                        <td>
+                            <select id="method-${r.requestId}" ${reconciled ? 'disabled' : ''} style="margin: 0 0 8px 0; padding: 6px; font-size: 13px;">
+                                <option value="Cash at Uni">Cash at University</option>
+                                <option value="InstaPay">InstaPay</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="POS">POS</option>
+                            </select>
+                            <input type="date" id="date-${r.requestId}" value="${todayStr}" ${reconciled ? 'disabled' : ''} style="margin:0; padding:6px; font-size:13px;">
+                        </td>
+                        <td>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <input type="number" id="amt-${r.requestId}" value="${r.remainingAmount}" max="${r.remainingAmount}" min="0" ${reconciled ? 'disabled' : ''} placeholder="Amount" style="margin:0; padding:6px; font-size:13px;">
+                                <div style="display: flex; gap: 5px;">
+                                    <input type="number" id="disc-${r.requestId}" placeholder="Disc %" min="0" max="100" ${reconciled ? 'disabled' : ''} style="margin:0; padding:6px; font-size:13px; width: 50%;" oninput="calculateRemaining('${r.requestId}', ${r.remainingAmount}, ${r.totalFees})">
+                                    <input type="text" id="appr-${r.requestId}" placeholder="Approved By" ${reconciled ? 'disabled' : ''} style="margin:0; padding:6px; font-size:13px; width: 50%;">
+                                </div>
+                                <small id="hint-${r.requestId}" style="color:#0f766e; font-weight:600; font-size:11px; display:none;"></small>
+                            </div>
+                            <input type="text" id="tx-${r.requestId}" ${reconciled ? 'disabled' : ''} placeholder="Ref No." style="margin:5px 0 0 0; padding:6px; font-size:13px;">
+                        </td>
+                        <td>
+                            ${reconciled ? `<span style="color:var(--success-color); font-weight:600;">Fully Reconciled</span>` :
+                                `<button class="btn btn-success" style="padding:6px; font-size:12px;" onclick="commitPaymentAndPrint('${r.requestId}', '${r.studentName}', '${r.studentId}', '${r.faculty}')">Confirm & Print</button>`
+                            }
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) { alert("Error loading finance dashboard."); }
+        }
+        
+        function calculateRemaining(reqId, remainingAmt, totalFees) {
+            const discInput = document.getElementById(`disc-${reqId}`);
+            const amtInput = document.getElementById(`amt-${reqId}`);
+            const hint = document.getElementById(`hint-${reqId}`);
+            if (discInput && discInput.value) {
+                let perc = Math.min(100, Math.max(0, parseFloat(discInput.value)));
+                let discVal = Math.round((totalFees * perc) / 100);
+                let newPay = Math.max(0, remainingAmt - discVal);
+                amtInput.value = newPay;
+                hint.style.display = 'block';
+                hint.innerText = `Discount: -${discVal} EGP`;
+            } else {
+                amtInput.value = remainingAmt;
+                if(hint) hint.style.display = 'none';
+            }
+        }
+        
+        function exportToExcel() {
+            if (!globalRequestsData || globalRequestsData.length === 0) { alert("No data available."); return; }
+            let csv = "\ufeffStudent ID,Student Name,Courses,Cash Paid,Discount,Method,Date,Receipt\n";
+            let count = 0;
+            globalRequestsData.forEach(r => {
+                if (r.paymentsHistory && r.paymentsHistory.length > 0) {
+                    let paid = 0, disc = 0, methods = [], dates = [], receipts = [];
+                    r.paymentsHistory.forEach(p => {
+                        const a = parseFloat(p.amount) || 0;
+                        if (p.method === 'Discount' || p.status === 'Settlement/Discount') { disc += a; }
+                        else { paid += a; methods.push(p.method); dates.push(p.date ? new Date(p.date).toLocaleDateString('en-GB') : ''); receipts.push(p.receiptNo); }
+                    });
+                    if (paid > 0 || disc > 0) {
+                        count++;
+                        csv += `"${r.studentId}","${r.studentName}","${r.courses}",${paid},${disc},"${methods.join('+')}","${dates.join(', ')}","${receipts.join(', ')}"\n`;
+                    }
+                }
+            });
+            if (count === 0) { alert("No payment records."); return; }
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "Payments_Report_" + new Date().toISOString().split('T')[0] + ".csv";
+            link.click();
+        }
+
+        async function commitPaymentAndPrint(reqId, stuName, stuId, faculty) {
+            const txToken = document.getElementById(`tx-${reqId}`).value.trim() || 'CASH';
+            const payMethod = document.getElementById(`method-${reqId}`).value;
+            const payDate = document.getElementById(`date-${reqId}`).value;
+            const payAmt = document.getElementById(`amt-${reqId}`).value;
+            const discount = document.getElementById(`disc-${reqId}`).value || 0;
+            const approver = document.getElementById(`appr-${reqId}`).value || '';
+
+            if(payAmt === '' || payAmt < 0) { alert("Enter a valid payment amount."); return; }
+            if(discount > 0 && !approver.trim()) { alert("Specify who approved the discount."); return; }
+
+            const btn = event.target;
+            btn.innerText = "Processing..."; btn.disabled = true;
+
+            try {
+                const out = await apiCall('/finance/processPayment', 'POST', {
+                    requestId: reqId, amountToPay: payAmt, refNum: txToken,
+                    paymentMethod: payMethod, paymentDate: payDate,
+                    email: localStorage.getItem('userEmail'),
+                    discountPercent: discount, approvedBy: approver
+                });
+                
+                if(out.success) {
+                    alert(out.message);
+                    if(payAmt > 0) executeDirectPrint(out.receiptNo, stuName, stuId, faculty, payAmt, payDate, payMethod);
+                    pullLedger();
+                } else {
+                    alert(out.message);
+                    btn.innerText = "Confirm & Print"; btn.disabled = false;
+                }
+            } catch(e) { 
+                alert("Transaction error."); btn.innerText = "Confirm & Print"; btn.disabled = false;
+            }
+        }
+
+        function executeDirectPrint(receiptNo, name, id, faculty, amount, date, method) {
+            const reasonText = document.getElementById('receiptReasonText').value;
+            const payDate = new Date(date).toLocaleDateString('en-GB');
+            const printDate = new Date().toLocaleDateString('en-GB');
+            const printTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            const amountText = tafqeet(Number(amount));
+
+            const receiptHTML = `
+                <!DOCTYPE html><html><head><style>
+                    @page { size: A5 landscape; margin: 0; }
+                    body { margin: 0; padding: 10mm; width: 210mm; height: 148mm; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+                    .rc { border: 2px solid #000; padding: 8px; height: 100%; box-sizing: border-box; }
+                    .ri { border: 1px solid #444; padding: 15px; height: 100%; box-sizing: border-box; }
+                    .rh { display: table; width: 100%; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+                    .rc2 { display: table-cell; vertical-align: middle; }
+                    .rb { border: 1px solid #000; padding: 6px 12px; border-radius: 4px; text-align: left; font-size: 13px; }
+                    .rt { text-align: center; font-size: 20px; font-weight: bold; margin: 10px 0; }
+                    .rr { display: table; width: 100%; margin-bottom: 12px; font-size: 15px; border-bottom: 1px dashed #aaa; padding-bottom: 4px; }
+                    .ra { border: 2px solid #000; padding: 6px 15px; font-weight: bold; font-size: 18px; border-radius: 4px; float: left; }
+                    .rf { display: table; width: 100%; margin-top: 25px; }
+                    .rfc { display: table-cell; vertical-align: bottom; width: 33.33%; }
+                    .rs { width: 95px; height: 95px; border: 1px solid #aaa; border-radius: 50%; margin: 0 auto; text-align: center; color: #777; font-size: 11px; padding-top: 28px; transform: rotate(-10deg); }
+                </style></head><body>
+                <div class="rc"><div class="ri">
+                    <div class="rh">
+                        <div class="rc2" style="width:35%"><div class="rb"><strong>Receipt: ${receiptNo}</strong><br>Date: ${payDate}</div></div>
+                        <div class="rc2" style="width:30%; text-align:center"><img src="logo.png" style="height:60px;" onerror="this.style.display='none'"></div>
+                        <div class="rc2" style="width:35%; text-align:left"><h2 style="margin:0; font-size:22px;">UEC University</h2><p style="margin:0; font-size:13px;">Accounts & Treasury</p></div>
+                    </div>
+                    <div class="rt">CASH RECEIPT</div>
+                    <div class="rr"><div style="width:18%; font-weight:bold; display:table-cell;">Received from:</div><div style="font-weight:bold; font-size:17px; display:table-cell; text-align:right;">${name}</div></div>
+                    <div class="rr"><div style="width:50%; display:table-cell;"><strong>Faculty:</strong> ${faculty}</div><div style="width:50%; display:table-cell; text-align:left;"><strong>ID:</strong> ${id}</div></div>
+                    <div class="rr" style="border-bottom:none;"><div style="display:table-cell; vertical-align:middle; font-weight:bold; width:22%;">Amount in words:</div><div style="display:table-cell; vertical-align:middle; font-weight:bold; font-size:14px;">${amountText}</div><div style="display:table-cell; width:25%;"><div class="ra">EGP ${amount}</div></div></div>
+                    <div class="rr" style="margin-top:10px;"><div style="display:table-cell; width:12%; font-weight:bold;">For:</div><div style="display:table-cell; font-weight:600;">${reasonText}</div></div>
+                    <div class="rf">
+                        <div class="rfc" style="text-align:right; font-size:11px;">Printed: ${printDate} ${printTime}<br>Method: ${method}</div>
+                        <div class="rfc"><div class="rs">Official Stamp</div></div>
+                        <div class="rfc" style="text-align:center;"><div style="border-top:1.5px solid #000; width:85%; margin:0 auto; padding-top:4px; font-weight:bold; font-size:14px;">Cashier Signature</div></div>
+                    </div>
+                </div></div></body></html>`;
+
+            const iframe = document.getElementById('printFrame');
+            iframe.contentWindow.document.open();
+            iframe.contentWindow.document.write(receiptHTML);
+            iframe.contentWindow.document.close();
+            setTimeout(() => { iframe.contentWindow.focus(); iframe.contentWindow.print(); }, 300);
+        }
+
+        function filterStudentTable() {
+            const filter = document.getElementById("searchStudentInput").value.toUpperCase();
+            const rows = document.querySelector("#ledgerTable tbody").getElementsByTagName("tr");
+            for (let i = 0; i < rows.length; i++) {
+                const cell = rows[i].getElementsByTagName("td")[0];
+                if (cell && (cell.textContent || cell.innerText).toUpperCase().indexOf(filter) > -1) rows[i].style.display = "";
+                else rows[i].style.display = "none";
+            }
+        }
+
+        function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+        window.onload = pullLedger;
+    </script>
+</body>
+</html>

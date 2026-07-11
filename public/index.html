@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UEC Registration Portal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="login-box">
+        <div class="logo-container">
+            <img src="logo.png" class="uni-logo-login" alt="University Logo">
+        </div>
+        <h2 style="color:#4E4099; margin-top:0; font-size:24px; text-align:center; font-weight:700;">University of East Capital</h2>
+        <h2 style="color:#0f172a; margin-top:0; font-size:19px; text-align:center; font-weight:500;">Registration Portal Login</h2>
+        <p style="color:#64748b; font-size:14px; text-align:center; margin-bottom:30px;">Access your workspace parameters safely.</p>
+        
+        <form id="loginForm">
+            <label style="font-weight:600; font-size:14px;">User Account Identifier (ID / Username)</label>
+            <input type="text" id="username" placeholder="e.g. 25100012" required>
+            
+            <label style="font-weight:600; font-size:14px;">Password</label>
+            <input type="password" id="password" placeholder="••••••••" required>
+            
+            <label style="font-weight:600; font-size:14px;">Target System Role Portal</label>
+            <select id="userRole">
+                <option value="student">Students Registration Portal</option>
+                <option value="supervisor">Academic Supervisor Portal</option>
+                <option value="finance">Financial Services Portal</option>
+                <option value="admin">Central Registrar Dashboard</option>
+            </select>
+            
+            <button type="submit" id="submitBtn" class="btn btn-primary" style="width: 100%; padding: 12px; margin-top: 10px;">Authenticate Identity</button>
+        </form>
+    </div>
+
+    <div id="forcePwdModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center;">
+        <div class="login-box" style="margin:0; width: 400px; padding: 30px;">
+            <h2 style="color:var(--danger-color); text-align:center; font-size:20px; margin-top:0;">Account Security Settings</h2>
+            <p style="text-align:center; font-size:14px; color:#64748b; margin-bottom:20px;">For security reasons, the university system requires you to change your default password before continuing.</p>
+            
+            <label style="font-weight:600; font-size:13px;">New Password</label>
+            <input type="password" id="newPwd" placeholder="Enter a strong password" required>
+            
+            <label style="font-weight:600; font-size:13px;">Confirm New Password</label>
+            <input type="password" id="confirmPwd" placeholder="Re-enter Password" required>
+            
+            <button id="updatePwdBtn" class="btn btn-danger" style="width: 100%; padding: 12px; margin-top: 10px;">Update Login Credentials</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value;
+            const r = document.getElementById('userRole').value;
+            
+            btn.disabled = true;
+            btn.innerText = "Connecting to Central Server...";
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p, role: r })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.requirePasswordChange) {
+                        document.getElementById('forcePwdModal').style.display = 'flex';
+                        document.getElementById('updatePwdBtn').onclick = async function() {
+                            const np = document.getElementById('newPwd').value;
+                            const cp = document.getElementById('confirmPwd').value;
+                            if(!np || np !== cp) { alert("Passwords do not match or are empty."); return; }
+                            if(np === p) { alert("Your new password must be different from the default password."); return; }
+                            
+                            const pwdBtn = document.getElementById('updatePwdBtn');
+                            pwdBtn.disabled = true;
+                            pwdBtn.innerText = "Updating...";
+                            
+                            try {
+                                const pRes = await fetch(`${API_BASE}/auth/changePassword`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ username: u, oldPassword: p, newPassword: np, role: r })
+                                });
+                                const pData = await pRes.json();
+                                if(pData.success) {
+                                    localStorage.setItem('sessionToken', result.token);
+                                    localStorage.setItem('userEmail', result.email);
+                                    localStorage.setItem('userRole', r);
+                                    localStorage.setItem('displayName', result.name);
+                                    window.location.href = r + '.html';
+                                } else {
+                                    alert("Failed to update: " + pData.message);
+                                    pwdBtn.disabled = false; pwdBtn.innerText = "Update Login Credentials";
+                                }
+                            } catch (error) {
+                                alert("Unable to connect to the server.");
+                                pwdBtn.disabled = false; pwdBtn.innerText = "Update Login Credentials";
+                            }
+                        };
+                    } else {
+                        localStorage.setItem('sessionToken', result.token);
+                        localStorage.setItem('userEmail', result.email);
+                        localStorage.setItem('userRole', r);
+                        localStorage.setItem('displayName', result.name);
+                        window.location.href = r + '.html';
+                    }
+                } else {
+                    alert("Authentication Failure: " + result.message);
+                }
+            } catch(err) {
+                console.error(err);
+                alert("Network Connection Error to Central Server.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Authenticate Identity";
+            }
+        });
+    </script>
+</body>
+</html>

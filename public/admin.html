@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central Registrar Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-brand">
+            <img src="logo.png" class="uni-logo-nav" alt="University Logo">
+            <h2>Registrar Program Dashboard</h2>
+        </div>
+        <button class="btn btn-danger" style="padding: 6px 14px;" onclick="logout()">Disconnect</button>
+    </div>
+
+    <div class="container">
+        <div class="card" style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0;">
+            <h3>Data Export Operations</h3>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-success" onclick="triggerExport('paid')">Export Paid Students (CSV)</button>
+                <button class="btn btn-warning" onclick="triggerExport('pending')">Export Awaiting Approval (CSV)</button>
+                <button class="btn btn-primary" onclick="triggerExport('unpaid')">Export Approved & Unpaid (CSV)</button>
+            </div>
+        </div>
+
+        <h3>Program Metric Framework Indicators</h3>
+        <div class="dashboard-grid">
+            <div class="card success">
+                <h3>Fully Enrolled Cohort</h3>
+                <h1 id="metricEnrolled" style="margin:0; font-size:36px; color:var(--success-color);">0</h1>
+            </div>
+            <div class="card warning">
+                <h3>Awaiting Advisory Review</h3>
+                <h1 id="metricAdvisory" style="margin:0; font-size:36px; color:var(--warning-color);">0</h1>
+            </div>
+            <div class="card">
+                <h3>Awaiting Cashier Clearance</h3>
+                <h1 id="metricFinance" style="margin:0; font-size:36px; color:var(--primary-color);">0</h1>
+            </div>
+            <div class="card success" style="border-top-color: #a855f7;">
+                <h3>Aggregated Gross Revenue</h3>
+                <h1 id="metricRevenue" style="margin:0; font-size:32px; color:#7c3aed;">0 EGP</h1>
+            </div>
+        </div>
+
+        <h3>Course Allocation & Satiation Analytics</h3>
+        <table id="analyticsTable">
+            <thead>
+                <tr>
+                    <th>Course Code</th>
+                    <th>Course Name</th>
+                    <th>Booked Seats</th>
+                    <th>Max Capacity</th>
+                    <th>Fill Rate</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const authToken = localStorage.getItem('sessionToken');
+        const userRole = localStorage.getItem('userRole');
+
+        if (!authToken || userRole !== 'admin') { window.location.href = 'index.html'; }
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const opts = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(`${API_BASE}${endpoint}`, opts);
+            return res.json();
+        }
+
+        async function pullMetrics() {
+            try {
+                const data = await apiCall('/admin/dashboard');
+                if (!data.success) { alert(data.message); return; }
+
+                document.getElementById('metricEnrolled').innerText = data.metrics.registeredStudents;
+                document.getElementById('metricAdvisory').innerText = data.metrics.pendingApprovals;
+                document.getElementById('metricFinance').innerText = data.metrics.pendingPayments;
+                document.getElementById('metricRevenue').innerText = data.metrics.totalRevenue.toLocaleString() + " EGP";
+
+                const tbody = document.querySelector('#analyticsTable tbody');
+                tbody.innerHTML = '';
+
+                data.courseStats.forEach(c => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${c.code}</strong></td>
+                        <td>${c.name}</td>
+                        <td>${c.allocated} Students</td>
+                        <td>${c.max} Slots</td>
+                        <td>
+                            <div style="background:#e2e8f0; border-radius:6px; width:100%; height:16px; position:relative; overflow:hidden;">
+                                <div style="background:linear-gradient(90deg, #3b82f6, #2563eb); height:100%; width:${c.percentage}; transition: width 0.5s;"></div>
+                                <small style="position:absolute; top:0; left:8px; color:#0f172a; font-weight:700; font-size:11px; line-height:16px;">${c.percentage}</small>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) { alert("Error loading dashboard metrics."); }
+        }
+
+        async function triggerExport(type) {
+            try {
+                const data = await apiCall(`/admin/export/${type}`);
+                if (data.csvData) {
+                    const blob = new Blob([data.csvData], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `export_${type}_report.csv`;
+                    link.click();
+                } else {
+                    alert("No data available to export.");
+                }
+            } catch(e) { alert("Export failed."); }
+        }
+
+        function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+        window.onload = pullMetrics;
+    </script>
+</body>
+</html>

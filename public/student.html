@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Enrollment Portal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-brand">
+            <img src="logo.png" class="uni-logo-nav" alt="University Logo">
+            <h2>Summer Course Registration Portal</h2>
+        </div>
+        <div>
+            <span id="displayStudentName" style="margin-right:20px; font-weight:600;"></span>
+            <button class="btn btn-warning" style="padding: 6px 14px; margin-right: 10px;" onclick="document.getElementById('changePwdModal').style.display='flex'">Change Password</button>
+            <button class="btn btn-danger" style="padding: 6px 14px;" onclick="logout()">Disconnect</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tracker-wrapper" id="trackerComponent">
+            <div class="tracker-step" id="st-Draft">● Draft Selection</div>
+            <div class="tracker-step" id="st-Submitted">● Sent to Advisor</div>
+            <div class="tracker-step" id="st-Approved">● Layout Approved</div>
+            <div class="tracker-step" id="st-PendingPayment">● Financial Pending</div>
+            <div class="tracker-step" id="st-Registered">● Registration Confirmed ✓</div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h3>Student Profile Architecture</h3>
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div style="flex-shrink: 0;">
+                        <img id="studentPhoto" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'></svg>" alt="Student Photo" style="width: 100px; height: 125px; border-radius: 6px; object-fit: cover; border: 2px solid #e2e8f0; background-color: #f8fafc;" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png';">
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <p><strong>System ID:</strong> <span id="lblId">---</span></p>
+                        <p><strong>Full Name:</strong> <span id="lblName">---</span></p>
+                        <p><strong>Faculty:</strong> <span id="lblFaculty">---</span></p>
+                        <p><strong>Level:</strong> <span id="lblLevel">---</span></p>
+                        <p><strong>Advisor:</strong> <span id="lblSup">---</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="card success">
+                <h3>Live Billing & Credit Matrix</h3>
+                <p><strong>Status:</strong> <span id="lblStatus" style="font-weight:bold; color:var(--primary-color);">---</span></p>
+                <p><strong>Credits:</strong> <span id="lblCredits">0</span> / 10 Max CH</p>
+                <p><strong>Total Fees:</strong> <span id="lblFees">0</span> EGP</p>
+            </div>
+        </div>
+
+        <div id="advisorFeedbackBox" class="card danger" style="display:none; margin-bottom: 25px;">
+            <h3>Advisor Feedback</h3>
+            <p id="txtFeedback" style="color:var(--dark-neutral); font-weight:500;"></p>
+        </div>
+
+        <h3>Eligible Summer Retake Courses</h3>
+        <table id="catalogTable">
+            <thead>
+                <tr>
+                    <th>Select</th>
+                    <th>Course Code</th>
+                    <th>Course Name</th>
+                    <th>Credit Hours</th>
+                    <th>Fee Per Credit</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        
+        <div style="margin-top:30px; text-align:right;">
+            <button id="commitActionBtn" class="btn btn-success" onclick="executeFinalFormSubmission()">Lock Layout & Final Submit</button>
+        </div>
+    </div>
+
+    <div id="changePwdModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center;">
+        <div class="login-box" style="margin:0; width: 400px; padding: 30px;">
+            <h2 style="color:var(--primary-color); text-align:center; font-size:20px; margin-top:0;">Change Your Password</h2>
+            <input type="password" id="optOldPwd" placeholder="Current Password" required style="margin-bottom: 10px;">
+            <input type="password" id="optNewPwd" placeholder="New Password" required style="margin-bottom: 10px;">
+            <input type="password" id="optConfirmPwd" placeholder="Confirm New Password" required style="margin-bottom: 20px;">
+            <div style="display:flex; gap:10px;">
+                <button id="btnSubmitChangePwd" class="btn btn-primary" style="flex:1;" onclick="submitPasswordChange()">Update Password</button>
+                <button class="btn btn-danger" style="flex:1;" onclick="document.getElementById('changePwdModal').style.display='none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const authToken = localStorage.getItem('sessionToken');
+        const userRole = localStorage.getItem('userRole');
+        let localState = null;
+
+        if (!authToken || userRole !== 'student') { window.location.href = 'index.html'; }
+        document.getElementById('displayStudentName').innerText = localStorage.getItem('displayName');
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const opts = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(`${API_BASE}${endpoint}`, opts);
+            return res.json();
+        }
+
+        async function fetchStateEngine() {
+            try {
+                const data = await apiCall('/student/dashboard');
+                if(!data.success) { alert(data.message); return; }
+                localState = data;
+                renderUI();
+            } catch(e) { alert("Communication timeout with server."); }
+        }
+
+        function renderUI() {
+            document.getElementById('lblId').innerText = localState.studentInfo.id;
+            if (localState.studentInfo.id) {
+                document.getElementById('studentPhoto').src = "photo/" + localState.studentInfo.id + ".jpg";
+            }
+            document.getElementById('lblName').innerText = localState.studentInfo.name;
+            document.getElementById('lblFaculty').innerText = localState.studentInfo.faculty || "---";
+            document.getElementById('lblLevel').innerText = localState.studentInfo.level;
+            document.getElementById('lblSup').innerText = localState.studentInfo.supervisorName;
+            
+            const req = localState.currentRequest;
+            document.getElementById('lblStatus').innerText = req.status;
+            document.getElementById('lblCredits').innerText = req.totalCredits;
+            document.getElementById('lblFees').innerText = req.totalFees;
+
+            evaluateVisualTracker(req.status);
+
+            if(req.comments) {
+                document.getElementById('advisorFeedbackBox').style.display = 'block';
+                document.getElementById('txtFeedback').innerText = req.comments;
+            } else {
+                document.getElementById('advisorFeedbackBox').style.display = 'none';
+            }
+
+            const tbody = document.querySelector('#catalogTable tbody');
+            tbody.innerHTML = '';
+
+            const activeLock = !['Draft', 'Returned for Modification'].includes(req.status);
+            if(activeLock) {
+                document.getElementById('commitActionBtn').disabled = true;
+                document.getElementById('commitActionBtn').innerText = "Application Structure Locked";
+            } else {
+                document.getElementById('commitActionBtn').disabled = false;
+                document.getElementById('commitActionBtn').innerText = "Lock Layout & Final Submit";
+            }
+
+            localState.courses.forEach(c => {
+                const isChecked = localState.selectedCourses.includes(c.courseCode);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" value="${c.courseCode}" data-ch="${c.creditHours}" data-cost="${c.feePerCredit}" ${isChecked ? 'checked' : ''} ${activeLock || (c.availableSeats <= 0 && !isChecked) ? 'disabled' : ''} onchange="evaluateClientMetrics()"></td>
+                    <td><strong>${c.courseCode}</strong></td>
+                    <td>${c.courseName}</td>
+                    <td><span class="badge">${c.creditHours} CH</span></td>
+                    <td>${c.feePerCredit} EGP</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            evaluateClientMetrics();
+        }
+
+        function evaluateClientMetrics() {
+            if(!localState) return;
+            if(!['Draft', 'Returned for Modification'].includes(localState.currentRequest.status)) return;
+            const selected = document.querySelectorAll('#catalogTable input[type="checkbox"]:checked');
+            let ch = 0; let fees = 0;
+            selected.forEach(box => {
+                ch += parseInt(box.getAttribute('data-ch'));
+                fees += parseInt(box.getAttribute('data-ch')) * parseFloat(box.getAttribute('data-cost'));
+            });
+            if(ch > 10) {
+                alert("You cannot register for more than 10 credit hours.");
+                event.target.checked = false;
+                evaluateClientMetrics();
+                return;
+            }
+            document.getElementById('lblCredits').innerText = ch;
+            document.getElementById('lblFees').innerText = fees;
+        }
+
+        function evaluateVisualTracker(status) {
+            document.querySelectorAll('.tracker-step').forEach(s => s.className = 'tracker-step');
+            if(status === 'Draft') document.getElementById('st-Draft').classList.add('active');
+            if(status === 'Submitted' || status === 'Under Academic Review') {
+                document.getElementById('st-Draft').classList.add('completed');
+                document.getElementById('st-Submitted').classList.add('active');
+            }
+            if(status === 'Approved by Supervisor') {
+                document.getElementById('st-Draft').classList.add('completed');
+                document.getElementById('st-Submitted').classList.add('completed');
+                document.getElementById('st-Approved').classList.add('active');
+            }
+            if(status === 'Pending Payment') {
+                document.getElementById('st-Draft').classList.add('completed');
+                document.getElementById('st-Submitted').classList.add('completed');
+                document.getElementById('st-Approved').classList.add('completed');
+                document.getElementById('st-PendingPayment').classList.add('active');
+            }
+            if(status === 'Registered Successfully' || status === 'Payment Confirmed') {
+                document.getElementById('st-Draft').classList.add('completed');
+                document.getElementById('st-Submitted').classList.add('completed');
+                document.getElementById('st-Approved').classList.add('completed');
+                document.getElementById('st-PendingPayment').classList.add('completed');
+                document.getElementById('st-Registered').classList.add('completed');
+            }
+        }
+
+        async function executeFinalFormSubmission() {
+            const boxes = document.querySelectorAll('#catalogTable input[type="checkbox"]:checked');
+            const collection = Array.from(boxes).map(b => b.value);
+            if(collection.length === 0) { alert("Please select at least one course before submitting."); return; }
+            if(!confirm("Once submitted, your course selection will be sent for academic approval and cannot be modified unless returned by your Advisor.")) return;
+
+            try {
+                const result = await apiCall('/student/submitRegistration', 'POST', {
+                    studentId: localState.studentInfo.id,
+                    email: localStorage.getItem('userEmail'),
+                    courses: collection
+                });
+                alert(result.message);
+                fetchStateEngine();
+            } catch(e) { alert("Data transmission error."); }
+        }
+
+        async function submitPasswordChange() {
+            const op = document.getElementById('optOldPwd').value;
+            const np = document.getElementById('optNewPwd').value;
+            const cp = document.getElementById('optConfirmPwd').value;
+            if(!op || !np || !cp) { alert("Please complete all required fields."); return; }
+            if(np !== cp) { alert("Passwords do not match."); return; }
+            
+            const btn = document.getElementById('btnSubmitChangePwd');
+            btn.disabled = true; btn.innerText = "Updating...";
+            
+            try {
+                const pData = await apiCall('/auth/changePassword', 'POST', {
+                    username: authToken, oldPassword: op, newPassword: np, role: 'student'
+                });
+                if(pData.success) {
+                    alert("Password changed successfully.");
+                    document.getElementById('changePwdModal').style.display = 'none';
+                    document.getElementById('optOldPwd').value = '';
+                    document.getElementById('optNewPwd').value = '';
+                    document.getElementById('optConfirmPwd').value = '';
+                } else {
+                    alert(pData.message);
+                }
+            } catch (e) {
+                alert("Unable to connect to the server.");
+            } finally {
+                btn.disabled = false; btn.innerText = "Update";
+            }
+        }
+
+        function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+        window.onload = fetchStateEngine;
+    </script>
+</body>
+</html>
