@@ -169,4 +169,48 @@ router.post('/setPhoto', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
+router.post('/addStudent', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { studentId, name, email, faculty, academicLevel, supervisorId } = req.body;
+    if (!studentId || !name) {
+      return res.json({ success: false, message: 'Student ID and Name are required.' });
+    }
+    const { rows: existing } = await db.query('SELECT student_id FROM students WHERE student_id = $1', [studentId]);
+    if (existing.length > 0) {
+      return res.json({ success: false, message: 'Student ID already exists.' });
+    }
+    const hash = await bcrypt.hash(studentId, 12);
+    await db.query(
+      'INSERT INTO students (student_id, name, email, password_hash, faculty, academic_level, supervisor_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [studentId, name, email || null, hash, faculty || 'General', academicLevel || null, supervisorId || null]
+    );
+    return res.json({ success: true, message: `Student ${studentId} added. Password: ${studentId}` });
+  } catch (error) {
+    console.error('Add student error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
+router.post('/addSupervisor', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { supervisorId, name, email } = req.body;
+    if (!supervisorId || !name) {
+      return res.json({ success: false, message: 'Supervisor ID and Name are required.' });
+    }
+    const { rows: existing } = await db.query('SELECT supervisor_id FROM supervisors WHERE supervisor_id = $1', [supervisorId]);
+    if (existing.length > 0) {
+      return res.json({ success: false, message: 'Supervisor ID already exists.' });
+    }
+    const hash = await bcrypt.hash(supervisorId, 12);
+    await db.query(
+      'INSERT INTO supervisors (supervisor_id, name, email, password_hash) VALUES ($1, $2, $3, $4)',
+      [supervisorId, name, email || null, hash]
+    );
+    return res.json({ success: true, message: `Supervisor ${supervisorId} added. Password: ${supervisorId}` });
+  } catch (error) {
+    console.error('Add supervisor error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
 module.exports = router;

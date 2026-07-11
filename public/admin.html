@@ -94,6 +94,34 @@
                 </div>
             </div>
         </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:20px;">
+            <div class="card">
+                <h3>Add New Student</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <input type="text" id="newStudentId" placeholder="Student ID (e.g. 25-100300)" style="padding:8px;">
+                    <input type="text" id="newStudentName" placeholder="Full Name" style="padding:8px;">
+                    <input type="email" id="newStudentEmail" placeholder="Email (optional)" style="padding:8px;">
+                    <input type="text" id="newStudentFaculty" placeholder="Faculty (optional)" style="padding:8px;">
+                    <input type="text" id="newStudentLevel" placeholder="Academic Level (optional)" style="padding:8px;">
+                    <select id="newStudentSupervisor" style="padding:8px;">
+                        <option value="">Select Supervisor...</option>
+                    </select>
+                    <button class="btn btn-success" onclick="executeAddStudent()">Add Student</button>
+                    <small id="addStudentResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Add New Supervisor</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <input type="text" id="newSupervisorId" placeholder="Supervisor ID (e.g. Dr.Ahmed)" style="padding:8px;">
+                    <input type="text" id="newSupervisorName" placeholder="Full Name" style="padding:8px;">
+                    <input type="email" id="newSupervisorEmail" placeholder="Email (optional)" style="padding:8px;">
+                    <button class="btn btn-success" onclick="executeAddSupervisor()">Add Supervisor</button>
+                    <small id="addSupervisorResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -251,7 +279,62 @@
             } catch(e) { alert('Error setting photo.'); }
         }
 
-        window.onload = function() { pullMetrics(); loadStudentsForPhoto(); };
+        async function loadSupervisorsForDropdown() {
+            try {
+                const data = await apiCall('/admin/supervisors');
+                const select = document.getElementById('newStudentSupervisor');
+                select.innerHTML = '<option value="">Select Supervisor...</option>';
+                if (data.supervisors) data.supervisors.forEach(s => {
+                    select.innerHTML += `<option value="${s.supervisor_id}">${s.supervisor_id} - ${s.name}</option>`;
+                });
+            } catch(e) {}
+        }
+
+        async function executeAddStudent() {
+            const studentId = document.getElementById('newStudentId').value.trim();
+            const name = document.getElementById('newStudentName').value.trim();
+            const email = document.getElementById('newStudentEmail').value.trim();
+            const faculty = document.getElementById('newStudentFaculty').value.trim();
+            const academicLevel = document.getElementById('newStudentLevel').value.trim();
+            const supervisorId = document.getElementById('newStudentSupervisor').value;
+            const resultEl = document.getElementById('addStudentResult');
+            if (!studentId || !name) { alert('Student ID and Name are required.'); return; }
+            try {
+                const result = await apiCall('/admin/addStudent', 'POST', { studentId, name, email, faculty, academicLevel, supervisorId });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) {
+                    document.getElementById('newStudentId').value = '';
+                    document.getElementById('newStudentName').value = '';
+                    document.getElementById('newStudentEmail').value = '';
+                    document.getElementById('newStudentFaculty').value = '';
+                    document.getElementById('newStudentLevel').value = '';
+                    document.getElementById('newStudentSupervisor').value = '';
+                    loadStudentsForPhoto();
+                }
+            } catch(e) { alert('Error adding student.'); }
+        }
+
+        async function executeAddSupervisor() {
+            const supervisorId = document.getElementById('newSupervisorId').value.trim();
+            const name = document.getElementById('newSupervisorName').value.trim();
+            const email = document.getElementById('newSupervisorEmail').value.trim();
+            const resultEl = document.getElementById('addSupervisorResult');
+            if (!supervisorId || !name) { alert('Supervisor ID and Name are required.'); return; }
+            try {
+                const result = await apiCall('/admin/addSupervisor', 'POST', { supervisorId, name, email });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) {
+                    document.getElementById('newSupervisorId').value = '';
+                    document.getElementById('newSupervisorName').value = '';
+                    document.getElementById('newSupervisorEmail').value = '';
+                    loadSupervisorsForDropdown();
+                }
+            } catch(e) { alert('Error adding supervisor.'); }
+        }
+
+        window.onload = function() { pullMetrics(); loadStudentsForPhoto(); loadSupervisorsForDropdown(); };
     </script>
 </body>
 </html>
