@@ -142,6 +142,7 @@ router.post('/resetPassword', authMiddleware(['admin']), async (req, res) => {
     let table, idColumn;
     if (role === 'student') { table = 'students'; idColumn = 'student_id'; }
     else if (role === 'supervisor') { table = 'supervisors'; idColumn = 'supervisor_id'; }
+    else if (role === 'finance' || role === 'admin') { table = 'users'; idColumn = 'username'; }
     else { return res.json({ success: false, message: 'Invalid role.' }); }
 
     const { rows } = await db.query(`SELECT * FROM ${table} WHERE ${idColumn} = $1`, [userId]);
@@ -209,6 +210,41 @@ router.post('/addSupervisor', authMiddleware(['admin']), async (req, res) => {
     return res.json({ success: true, message: `Supervisor ${supervisorId} added. Password: ${supervisorId}` });
   } catch (error) {
     console.error('Add supervisor error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
+router.get('/users', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT username, email, role FROM users ORDER BY role, username');
+    return res.json({ success: true, users: rows });
+  } catch (error) {
+    console.error('Admin users error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
+router.post('/addUser', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { username, email, role } = req.body;
+    if (!username || !role) {
+      return res.json({ success: false, message: 'Username and Role are required.' });
+    }
+    if (!['admin', 'finance'].includes(role)) {
+      return res.json({ success: false, message: 'Role must be admin or finance.' });
+    }
+    const { rows: existing } = await db.query('SELECT username FROM users WHERE username = $1', [username]);
+    if (existing.length > 0) {
+      return res.json({ success: false, message: 'Username already exists.' });
+    }
+    const hash = await bcrypt.hash(username, 12);
+    await db.query(
+      'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4)',
+      [username, email || null, hash, role]
+    );
+    return res.json({ success: true, message: `User ${username} (${role}) added. Password: ${username}` });
+  } catch (error) {
+    console.error('Add user error:', error);
     return res.json({ success: false, message: 'Server error.' });
   }
 });

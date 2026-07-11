@@ -67,6 +67,8 @@
                         <option value="">Select Role...</option>
                         <option value="student">Student</option>
                         <option value="supervisor">Supervisor</option>
+                        <option value="finance">Finance</option>
+                        <option value="admin">Admin</option>
                     </select>
                     <select id="resetUserId" style="padding:8px;">
                         <option value="">Select User...</option>
@@ -95,7 +97,7 @@
             </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:20px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:20px; margin-top:20px;">
             <div class="card">
                 <h3>Add New Student</h3>
                 <div style="display:flex; flex-direction:column; gap:10px;">
@@ -119,6 +121,20 @@
                     <input type="email" id="newSupervisorEmail" placeholder="Email (optional)" style="padding:8px;">
                     <button class="btn btn-success" onclick="executeAddSupervisor()">Add Supervisor</button>
                     <small id="addSupervisorResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Add User (Finance / Admin)</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <input type="text" id="newUserUsername" placeholder="Username" style="padding:8px;">
+                    <select id="newUserRole" style="padding:8px;">
+                        <option value="">Select Role...</option>
+                        <option value="finance">Finance</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <input type="email" id="newUserEmail" placeholder="Email (optional)" style="padding:8px;">
+                    <button class="btn btn-success" onclick="executeAddUser()">Add User</button>
+                    <small id="addUserResult" style="font-weight:600;"></small>
                 </div>
             </div>
         </div>
@@ -200,14 +216,23 @@
             select.innerHTML = '<option value="">Loading...</option>';
             if (!role) { select.innerHTML = '<option value="">Select User...</option>'; return; }
             try {
-                const endpoint = role === 'student' ? '/admin/students' : '/admin/supervisors';
-                const data = await apiCall(endpoint);
                 select.innerHTML = '<option value="">Select User...</option>';
-                const list = role === 'student' ? data.students : data.supervisors;
-                if (list) list.forEach(u => {
-                    const id = role === 'student' ? u.student_id : u.supervisor_id;
-                    select.innerHTML += `<option value="${id}">${id} - ${u.name}</option>`;
-                });
+                if (role === 'student') {
+                    const data = await apiCall('/admin/students');
+                    if (data.students) data.students.forEach(u => {
+                        select.innerHTML += `<option value="${u.student_id}">${u.student_id} - ${u.name}</option>`;
+                    });
+                } else if (role === 'supervisor') {
+                    const data = await apiCall('/admin/supervisors');
+                    if (data.supervisors) data.supervisors.forEach(u => {
+                        select.innerHTML += `<option value="${u.supervisor_id}">${u.supervisor_id} - ${u.name}</option>`;
+                    });
+                } else {
+                    const data = await apiCall('/admin/users');
+                    if (data.users) data.users.filter(u => u.role === role).forEach(u => {
+                        select.innerHTML += `<option value="${u.username}">${u.username}</option>`;
+                    });
+                }
             } catch(e) { select.innerHTML = '<option value="">Error loading</option>'; }
         }
 
@@ -332,6 +357,24 @@
                     loadSupervisorsForDropdown();
                 }
             } catch(e) { alert('Error adding supervisor.'); }
+        }
+
+        async function executeAddUser() {
+            const username = document.getElementById('newUserUsername').value.trim();
+            const role = document.getElementById('newUserRole').value;
+            const email = document.getElementById('newUserEmail').value.trim();
+            const resultEl = document.getElementById('addUserResult');
+            if (!username || !role) { alert('Username and Role are required.'); return; }
+            try {
+                const result = await apiCall('/admin/addUser', 'POST', { username, email, role });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) {
+                    document.getElementById('newUserUsername').value = '';
+                    document.getElementById('newUserRole').value = '';
+                    document.getElementById('newUserEmail').value = '';
+                }
+            } catch(e) { alert('Error adding user.'); }
         }
 
         window.onload = function() { pullMetrics(); loadStudentsForPhoto(); loadSupervisorsForDropdown(); };
