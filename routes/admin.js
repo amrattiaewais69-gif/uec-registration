@@ -313,4 +313,22 @@ router.post('/bulkAssignSupervisors', authMiddleware(['admin']), async (req, res
   }
 });
 
+router.post('/updateCourseSeats', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { courseCode, maxSeats } = req.body;
+    if (!courseCode || maxSeats === undefined) {
+      return res.json({ success: false, message: 'Course code and max seats required.' });
+    }
+    const seats = parseInt(maxSeats);
+    if (isNaN(seats) || seats < 0) {
+      return res.json({ success: false, message: 'Invalid seat count.' });
+    }
+    await db.query('UPDATE courses SET max_seats = $1 WHERE course_code = $2', [seats, courseCode]);
+    return res.json({ success: true, message: `${courseCode} max seats updated to ${seats}.` });
+  } catch (error) {
+    console.error('Update seats error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
 module.exports = router;
