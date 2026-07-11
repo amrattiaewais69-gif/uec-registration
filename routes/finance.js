@@ -67,12 +67,12 @@ router.post('/processPayment', authMiddleware(['finance']), async (req, res) => 
 
     const { rows } = await client.query('SELECT * FROM requests WHERE request_id = $1', [requestId]);
     if (rows.length === 0) { await client.query('ROLLBACK'); return res.json({ success: false, message: 'Request not found.' }); }
-    const req = rows[0];
+    const requestRow = rows[0];
 
     let paymentAmt = Number(amountToPay || 0);
     let discountPerc = Number(discountPercent || 0);
     let discountAmount = 0;
-    if (discountPerc > 0) discountAmount = Math.round(Number(req.total_fees) * (discountPerc / 100));
+    if (discountPerc > 0) discountAmount = Math.round(Number(requestRow.total_fees) * (discountPerc / 100));
 
     const { rows: paidRows } = await client.query(
       "SELECT COALESCE(SUM(amount_paid), 0)::numeric as total FROM payments WHERE request_id = $1 AND status IN ('Verified', 'Settlement/Discount')",
@@ -80,7 +80,7 @@ router.post('/processPayment', authMiddleware(['finance']), async (req, res) => 
     );
     const totalPaidSoFar = parseFloat(paidRows[0].total) || 0;
 
-    if ((totalPaidSoFar + paymentAmt + discountAmount) > Number(req.total_fees)) {
+    if ((totalPaidSoFar + paymentAmt + discountAmount) > Number(requestRow.total_fees)) {
       await client.query('ROLLBACK');
       return res.json({ success: false, message: 'Payment exceeds total fees.' });
     }
@@ -97,7 +97,7 @@ router.post('/processPayment', authMiddleware(['finance']), async (req, res) => 
       newReceiptNo = RECEIPT_PREFIX + nextSeq;
       await client.query(
         'INSERT INTO payments (transaction_id, request_id, student_id, amount_paid, reference_number, payment_date, status, payment_method, receipt_no) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-        [uuidv4(), requestId, req.student_id, paymentAmt, ref, pDate, 'Verified', method, newReceiptNo]
+        [uuidv4(), requestId, requestRow.student_id, paymentAmt, ref, pDate, 'Verified', method, newReceiptNo]
       );
       nextSeq++;
     }
@@ -106,12 +106,12 @@ router.post('/processPayment', authMiddleware(['finance']), async (req, res) => 
       let discReceipt = RECEIPT_PREFIX + nextSeq;
       await client.query(
         'INSERT INTO payments (transaction_id, request_id, student_id, amount_paid, reference_number, payment_date, status, payment_method, receipt_no) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-        [uuidv4(), requestId, req.student_id, discountAmount, `Discount ${discountPerc}% - ${approvedBy}`, pDate, 'Settlement/Discount', 'Discount', discReceipt]
+        [uuidv4(), requestId, requestRow.student_id, discountAmount, `Discount ${discountPerc}% - ${approvedBy}`, pDate, 'Settlement/Discount', 'Discount', discReceipt]
       );
       if (!newReceiptNo) newReceiptNo = discReceipt;
     }
 
-    const newStatus = (totalPaidSoFar + paymentAmt + discountAmount) >= Number(req.total_fees) ? 'Registered Successfully' : 'Partially Paid';
+    const newStatus = (totalPaidSoFar + paymentAmt + discountAmount) >= Number(requestRow.total_fees) ? 'Registered Successfully' : 'Partially Paid';
     await client.query(
       'UPDATE requests SET status = $1, reference_number = $2, payment_date = $3 WHERE request_id = $4',
       [newStatus, ref !== 'N/A' ? ref : 'Discount Applied', pDate, requestId]
@@ -121,7 +121,7 @@ router.post('/processPayment', authMiddleware(['finance']), async (req, res) => 
     return res.json({ success: true, message: 'Payment processed.', receiptNo: newReceiptNo });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Finance action error:', error);
+    console.error('Finance action error:', error.message);
     return res.json({ success: false, message: 'Server error.' });
   } finally {
     client.release();
