@@ -249,4 +249,57 @@ router.post('/addUser', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
+router.post('/bulkFailedCourses', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.json({ success: false, message: 'No data provided.' });
+    }
+    let inserted = 0, skipped = 0;
+    for (const row of data) {
+      const studentId = (row.studentId || '').trim();
+      const courseCode = (row.courseCode || '').trim();
+      if (!studentId || !courseCode) { skipped++; continue; }
+      try {
+        await db.query(
+          'INSERT INTO failed_courses (student_id, course_code) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [studentId, courseCode]
+        );
+        inserted++;
+      } catch (e) { skipped++; }
+    }
+    return res.json({ success: true, message: `Done. Inserted: ${inserted}, Skipped: ${skipped}` });
+  } catch (error) {
+    console.error('Bulk failed courses error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
+router.post('/bulkAssignSupervisors', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.json({ success: false, message: 'No data provided.' });
+    }
+    let updated = 0, skipped = 0;
+    for (const row of data) {
+      const studentId = (row.studentId || '').trim();
+      const supervisorId = (row.supervisorId || '').trim();
+      if (!studentId || !supervisorId) { skipped++; continue; }
+      try {
+        const result = await db.query(
+          'UPDATE students SET supervisor_id = $1 WHERE student_id = $2',
+          [supervisorId, studentId]
+        );
+        if (result.rowCount > 0) updated++;
+        else skipped++;
+      } catch (e) { skipped++; }
+    }
+    return res.json({ success: true, message: `Done. Updated: ${updated}, Skipped: ${skipped}` });
+  } catch (error) {
+    console.error('Bulk assign supervisors error:', error);
+    return res.json({ success: false, message: 'Server error.' });
+  }
+});
+
 module.exports = router;

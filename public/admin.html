@@ -138,6 +138,29 @@
                 </div>
             </div>
         </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:20px;">
+            <div class="card">
+                <h3>Bulk Upload: Failed Courses</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <small>Paste one record per line: <code>StudentID,CourseCode</code></small>
+                    <small>Example: <code>25-100001,BMS172</code></small>
+                    <textarea id="bulkFailedCourses" rows="8" placeholder="25-100001,BMS172&#10;25-100001,BMS171&#10;25-100002,BMS151" style="padding:8px; font-family:monospace; font-size:13px;"></textarea>
+                    <button class="btn btn-warning" onclick="executeBulkFailedCourses()">Upload Failed Courses</button>
+                    <small id="bulkFailedResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Bulk Upload: Student-Supervisor Assignment</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <small>Paste one record per line: <code>StudentID,SupervisorID</code></small>
+                    <small>Example: <code>25-100001,nmahmoud</code></small>
+                    <textarea id="bulkSupervisorAssign" rows="8" placeholder="25-100001,nmahmoud&#10;25-100002,nmahmoud&#10;25-100003,11" style="padding:8px; font-family:monospace; font-size:13px;"></textarea>
+                    <button class="btn btn-warning" onclick="executeBulkAssignSupervisors()">Upload Assignments</button>
+                    <small id="bulkSupervisorResult" style="font-weight:600;"></small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -375,6 +398,41 @@
                     document.getElementById('newUserEmail').value = '';
                 }
             } catch(e) { alert('Error adding user.'); }
+        }
+
+        function parseBulkText(text) {
+            return text.trim().split('\n').filter(line => line.trim()).map(line => {
+                const parts = line.split(',').map(p => p.trim());
+                return { first: parts[0] || '', second: parts[1] || '' };
+            });
+        }
+
+        async function executeBulkFailedCourses() {
+            const text = document.getElementById('bulkFailedCourses').value;
+            const resultEl = document.getElementById('bulkFailedResult');
+            const rows = parseBulkText(text);
+            if (rows.length === 0) { alert('Paste data first.'); return; }
+            const data = rows.map(r => ({ studentId: r.first, courseCode: r.second }));
+            try {
+                const result = await apiCall('/admin/bulkFailedCourses', 'POST', { data });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) document.getElementById('bulkFailedCourses').value = '';
+            } catch(e) { alert('Error uploading failed courses.'); }
+        }
+
+        async function executeBulkAssignSupervisors() {
+            const text = document.getElementById('bulkSupervisorAssign').value;
+            const resultEl = document.getElementById('bulkSupervisorResult');
+            const rows = parseBulkText(text);
+            if (rows.length === 0) { alert('Paste data first.'); return; }
+            const data = rows.map(r => ({ studentId: r.first, supervisorId: r.second }));
+            try {
+                const result = await apiCall('/admin/bulkAssignSupervisors', 'POST', { data });
+                resultEl.style.color = result.success ? '#16a34a' : '#dc2626';
+                resultEl.innerText = result.message;
+                if (result.success) document.getElementById('bulkSupervisorAssign').value = '';
+            } catch(e) { alert('Error uploading assignments.'); }
         }
 
         window.onload = function() { pullMetrics(); loadStudentsForPhoto(); loadSupervisorsForDropdown(); };
