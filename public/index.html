@@ -94,6 +94,7 @@
                                 const pData = await pRes.json();
                                 if(pData.success) {
                                     localStorage.setItem('sessionToken', result.token);
+                                    localStorage.setItem('userId', result.userId);
                                     localStorage.setItem('userEmail', result.email);
                                     localStorage.setItem('userRole', r);
                                     localStorage.setItem('displayName', result.name);
@@ -109,6 +110,7 @@
                         };
                     } else {
                         localStorage.setItem('sessionToken', result.token);
+                        localStorage.setItem('userId', result.userId);
                         localStorage.setItem('userEmail', result.email);
                         localStorage.setItem('userRole', r);
                         localStorage.setItem('displayName', result.name);

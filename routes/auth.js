@@ -1,8 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 
 const router = express.Router();
+
+function generateToken(id, role) {
+  return jwt.sign({ token: id, role: role }, process.env.JWT_SECRET, { expiresIn: '8h' });
+}
 
 router.post('/login', async (req, res) => {
   try {
@@ -20,7 +25,8 @@ router.post('/login', async (req, res) => {
       const valid = await bcrypt.compare(pStr, rows[0].password_hash);
       if (!valid) return res.json({ success: false, message: 'Invalid credentials.' });
       return res.json({
-        success: true, token: rows[0].student_id, email: rows[0].email,
+        success: true, token: generateToken(rows[0].student_id, 'student'),
+        userId: rows[0].student_id, email: rows[0].email,
         name: rows[0].name, faculty: rows[0].faculty || 'General',
         requirePasswordChange: (uStr === pStr)
       });
@@ -32,7 +38,8 @@ router.post('/login', async (req, res) => {
       const valid = await bcrypt.compare(pStr, rows[0].password_hash);
       if (!valid) return res.json({ success: false, message: 'Invalid credentials.' });
       return res.json({
-        success: true, token: rows[0].supervisor_id, email: rows[0].email,
+        success: true, token: generateToken(rows[0].supervisor_id, 'supervisor'),
+        userId: rows[0].supervisor_id, email: rows[0].email,
         name: rows[0].name, requirePasswordChange: (uStr === pStr)
       });
     }
@@ -43,7 +50,8 @@ router.post('/login', async (req, res) => {
       const valid = await bcrypt.compare(pStr, rows[0].password_hash);
       if (!valid) return res.json({ success: false, message: 'Invalid credentials.' });
       return res.json({
-        success: true, token: rows[0].username, email: rows[0].email,
+        success: true, token: generateToken(rows[0].username, role),
+        userId: rows[0].username, email: rows[0].email,
         name: rows[0].username, requirePasswordChange: (uStr === pStr)
       });
     }

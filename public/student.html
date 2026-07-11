@@ -246,7 +246,7 @@
             
             try {
                 const pData = await apiCall('/auth/changePassword', 'POST', {
-                    username: authToken, oldPassword: op, newPassword: np, role: 'student'
+                    username: localStorage.getItem('userId'), oldPassword: op, newPassword: np, role: 'student'
                 });
                 if(pData.success) {
                     alert("Password changed successfully.");

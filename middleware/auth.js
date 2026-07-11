@@ -5,7 +5,7 @@ function authMiddleware(allowedRoles = []) {
     const token = req.headers.authorization?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ success: false, message: 'Access denied. No token provided.' });
+      return res.status(401).json({ success: false, message: 'No token provided.' });
     }
 
     try {
@@ -13,7 +13,7 @@ function authMiddleware(allowedRoles = []) {
       req.user = decoded;
 
       if (allowedRoles.length > 0 && !allowedRoles.includes(decoded.role)) {
-        return res.status(403).json({ success: false, message: 'Access denied. Insufficient privileges.' });
+        return res.status(403).json({ success: false, message: 'Insufficient privileges.' });
       }
 
       next();
